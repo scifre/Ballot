@@ -1,7 +1,8 @@
 const express = require('express');
 const { Sequelize, DataTypes } = require('sequelize');
 const cors = require('cors');
-//const cron = require('node-cron');
+const { ethers } = require('ethers');
+require('dotenv').config();
 
 const sequelize = new Sequelize('voting_system', 'ayush', 'ayushyadav', {
   host: 'localhost',
@@ -11,6 +12,80 @@ const app = express();
 
 app.use(express.json());
 app.use(cors());
+
+// Load environment variables
+const CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3"; // Replace with your deployed contract address
+const ABI = [
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "candidateId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "hashedVoterId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "VoteCast",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      { 
+        "internalType": "uint256",
+        "name": "candidateId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "hashedVoterId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "vote",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+];
+
+// Load and verify private key
+const privateKey = process.env.PRIVATE_KEY;
+if (!privateKey) {
+  throw new Error('PRIVATE_KEY environment variable is not set');
+}
+
+// Initialize provider and wallet with error handling
+const provider = new ethers.providers.JsonRpcProvider("http://127.0.0.1:8545");
+const wallet = new ethers.Wallet(privateKey, provider);
+
+// Log successful connection (optional)
+console.log('Wallet connected successfully');
+
+const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
 
 // Define the Voter model (linked to the 'voters' table)
 const Voter = sequelize.define(
@@ -337,30 +412,115 @@ app.get('/api/voters/:voterId', async (req, res) => {
   }
 });
 
-// Schedule a task to run every minute
-/* cron.schedule('* * * * *', async () => {
-  console.log('Checking for elections to update status...');
-  try {
-    // Get the current time
-    const now = new Date();
+// API to handle vote casting
+app.post('/api/castvote/', async (req, res) => {
+  const { voterId, electionId, candidateId } = req.body;
 
-    // Find elections whose end time has passed and are still active
-    const electionsToUpdate = await Election.findAll({
-      where: {
-        end_datetime: { [sequelize.Op.lte]: now }, // End time is less than or equal to now
-        status: 'active', // Only update active elections
-      },
+  if (!voterId || !electionId || !candidateId) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  try {
+    // Hash the voterId before sending it to the smart contract
+    const hashedVoterId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(voterId.toString()));
+
+    // Call the smart contract function to cast the vote
+    const tx = await contract.vote(electionId, candidateId, hashedVoterId);
+    await tx.wait(); // Wait for the transaction to be mined
+
+    // Update the election status in the voter's table
+    const voterTableName = `voter_${voterId}`;
+    await sequelize.query(
+      `UPDATE ${voterTableName} SET status = 'voted' WHERE election_id = :electionId`,
+      {
+        replacements: { electionId },
+        type: sequelize.QueryTypes.UPDATE,
+      }
+    );
+
+    res.status(200).json({ 
+      message: 'Vote cast successfully and status updated', 
+      transactionHash: tx.hash 
+    });
+  } catch (error) {
+    console.error('Error casting vote:', error);
+    res.status(500).json({ message: 'Failed to cast vote', error: error.message });
+  }
+});
+
+// After your existing API endpoints, add:
+
+app.get('/api/admin/election/updateCount/:electionId', async (req, res) => {
+  const { electionId } = req.params;
+
+  try {
+    // Validate electionId
+    const election = await Election.findByPk(electionId);
+    if (!election) {
+      return res.status(404).json({ message: 'Election not found' });
+    }
+
+    // Get all VoteCast events for this election
+    const filter = contract.filters.VoteCast(electionId);
+    const events = await contract.queryFilter(filter);
+
+    // Count votes for each candidate
+    const voteCounts = {};
+
+    // Process each voting event
+    for (const event of events) {
+      const candidateId = event.args.candidateId.toString();
+      voteCounts[candidateId] = (voteCounts[candidateId] || 0) + 1;
+    }
+
+    // Get candidate details from the database
+    const electionTableName = `election_${electionId}`;
+    const candidates = await sequelize.query(
+      `SELECT candidate_id, candidate_name, candidate_party FROM ${electionTableName}`,
+      {
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    // Combine candidate details with vote counts
+    const results = candidates.map(candidate => ({
+      candidate_id: candidate.candidate_id,
+      candidate_name: candidate.candidate_name,
+      candidate_party: candidate.candidate_party,
+      vote_count: voteCounts[candidate.candidate_id.toString()] || 0
+    }));
+
+    // Sort results by vote count in descending order
+    results.sort((a, b) => b.vote_count - a.vote_count);
+
+    // Update election status if needed
+    const currentTime = new Date();
+    if (currentTime > election.end_datetime && election.status !== 'completed') {
+      await Election.update(
+        { status: 'completed' },
+        { where: { election_id: electionId } }
+      );
+    }
+
+    res.status(200).json({
+      election_id: electionId,
+      election_name: election.election_name,
+      status: election.status,
+      results: results,
+      total_votes: events.length
     });
 
-    // Update the status of these elections to 'completed'
-    for (const election of electionsToUpdate) {
-      election.status = 'completed';
-      await election.save();
-      console.log(`Updated election ID ${election.election_id} to completed.`);
-    }
   } catch (error) {
-    console.error('Error updating election statuses:', error);
+    console.error('Error updating vote count:', error);
+    res.status(500).json({ 
+      message: 'Failed to update vote count', 
+      error: error.message 
+    });
   }
-}); */
+});
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+// Start the server
+const PORT = 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

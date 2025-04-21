@@ -54,10 +54,14 @@ const VotePage = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/voters/${voterId}/vote/${electionId}`, {
+      const response = await fetch(`http://localhost:5000/api/castvote/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId: selectedCandidate }),
+        body: JSON.stringify({
+          voterId,
+          electionId,
+          candidateId: selectedCandidate,
+        }),
       });
 
       const data = await response.json();
@@ -66,7 +70,7 @@ const VotePage = () => {
       }
 
       alert('Vote cast successfully!');
-      navigate(`/voters/${voterId}`);
+      navigate(`/voter/${voterId}`);
     } catch (err) {
       console.error('Error casting vote:', err.message);
       alert('Failed to cast vote. Please try again.');
@@ -122,6 +126,9 @@ const VotePage = () => {
               <h2 className="text-xl font-bold">{candidate.candidate_name}</h2>
               <p className="text-gray-600">
                 <strong>Party:</strong> {candidate.candidate_party}
+              </p>
+              <p className="text-sm text-gray-500">
+                <strong>ID:</strong> {candidate.candidate_id}
               </p>
             </li>
           ))}
