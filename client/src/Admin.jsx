@@ -162,38 +162,21 @@ const AdminDashboard = () => {
           <div>
             <h2 className="text-xl font-bold mb-4">Active Elections</h2>
             {activeElections.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-gray-700">
-                  <thead className="bg-gray-100 text-gray-600 uppercase text-sm">
-                    <tr>
-                      <th className="p-4">Election Name</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Start Date</th>
-                      <th className="p-4">End Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeElections.map((election, index) => (
-                      <tr
-                        key={election.election_id}
-                        className={`hover:bg-gray-50 cursor-pointer ${
-                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        }`}
-                        onClick={() => navigate(`/elections/${election.election_id}`)} // Navigate to election page
-                      >
-                        <td className="p-4">{election.election_name}</td>
-                        <td className="p-4">{election.status}</td>
-                        <td className="p-4">
-                          {new Date(election.start_datetime).toLocaleString()}
-                        </td>
-                        <td className="p-4">
-                          {new Date(election.end_datetime).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="space-y-4">
+                {activeElections.map((election) => (
+                  <li
+                    key={election.election_id}
+                    className="p-4 border border-gray-300 rounded-md hover:shadow-md cursor-pointer"
+                    onClick={() => navigate(`/elections/${election.election_id}`)} // Navigate to election page
+                  >
+                    <h3 className="text-lg font-bold">{election.election_name}</h3>
+                    <p className="text-gray-600"><strong>Election ID:</strong> {election.election_id}</p>
+                    <p className="text-gray-600"><strong>Status:</strong> {election.status}</p>
+                    <p className="text-gray-600"><strong>Start Date:</strong> {new Date(election.start_datetime).toLocaleString()}</p>
+                    <p className="text-gray-600"><strong>End Date:</strong> {new Date(election.end_datetime).toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <p>No active elections found.</p>
             )}
@@ -210,9 +193,10 @@ const AdminDashboard = () => {
                     onClick={() => navigate(`/elections/${election.election_id}`)} // Navigate to election page
                   >
                     <h3 className="text-lg font-bold">{election.election_name}</h3>
-                    <p className="text-gray-600">Status: {election.status}</p>
-                    <p className="text-gray-600">Start Date: {new Date(election.start_datetime).toLocaleString()}</p>
-                    <p className="text-gray-600">End Date: {new Date(election.end_datetime).toLocaleString()}</p>
+                    <p className="text-gray-600"><strong>Election ID:</strong> {election.election_id}</p>
+                    <p className="text-gray-600"><strong>Status:</strong> {election.status}</p>
+                    <p className="text-gray-600"><strong>Start Date:</strong> {new Date(election.start_datetime).toLocaleString()}</p>
+                    <p className="text-gray-600"><strong>End Date:</strong> {new Date(election.end_datetime).toLocaleString()}</p>
                   </li>
                 ))}
               </ul>
