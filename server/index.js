@@ -279,13 +279,14 @@ app.post('/api/admin/new_election', async (req, res) => {
       status: 'active', // Default status
     });
 
-    // Dynamically create a new table for the election
+    // Dynamically create a new table for the election with an additional 'votes' column
     const electionTableName = `election_${newElection.election_id}`;
     await sequelize.query(`
       CREATE TABLE ${electionTableName} (
         candidate_id SERIAL PRIMARY KEY,
         candidate_name VARCHAR(255) NOT NULL,
-        candidate_party VARCHAR(255) NOT NULL
+        candidate_party VARCHAR(255) NOT NULL,
+        votes INTEGER DEFAULT 0
       )
     `);
 
@@ -516,6 +517,106 @@ app.get('/api/admin/election/updateCount/:electionId', async (req, res) => {
       message: 'Failed to update vote count', 
       error: error.message 
     });
+  }
+});
+
+app.post('/api/election/end', async (req, res) => {
+  const { electionId } = req.body;
+
+  if (!electionId) {
+    return res.status(400).json({ message: 'Election ID is required' });
+  }
+
+  try {
+    // Validate the election exists
+    const election = await Election.findByPk(electionId);
+    if (!election) {
+      return res.status(404).json({ message: 'Election not found' });
+    }
+
+    // Check if the election is already completed
+    if (election.status === 'completed') {
+      return res.status(400).json({ message: 'Election is already completed' });
+    }
+
+    // Fetch the latest vote counts from the blockchain
+    const filter = contract.filters.VoteCast(electionId);
+    const events = await contract.queryFilter(filter);
+
+    // Count votes for each candidate
+    const voteCounts = {};
+    for (const event of events) {
+      const candidateId = event.args.candidateId.toString();
+      voteCounts[candidateId] = (voteCounts[candidateId] || 0) + 1;
+    }
+
+    // Update the election_{electionId} table with the latest vote counts
+    const electionTableName = `election_${electionId}`;
+    for (const [candidateId, voteCount] of Object.entries(voteCounts)) {
+      await sequelize.query(
+        `UPDATE ${electionTableName} SET votes = :voteCount WHERE candidate_id = :candidateId`,
+        {
+          replacements: { voteCount, candidateId },
+          type: sequelize.QueryTypes.UPDATE,
+        }
+      );
+    }
+
+    // Update the election status to 'completed'
+    await Election.update(
+      { status: 'completed' },
+      { where: { election_id: electionId } }
+    );
+
+    // Fetch all voter IDs where role is 'voter'
+    const voters = await Voter.findAll({
+      where: { role: 'voter' },
+      attributes: ['voter_id'], // Only fetch voter_id
+    });
+
+    // Update the election status in each voter's table
+    for (const voter of voters) {
+      const voterTableName = `voter_${voter.voter_id}`;
+      try {
+        await sequelize.query(
+          `UPDATE ${voterTableName} SET status = 'completed' WHERE election_id = :electionId`,
+          {
+            replacements: { electionId },
+            type: sequelize.QueryTypes.UPDATE,
+          }
+        );
+      } catch (error) {
+        console.error(`Error updating table ${voterTableName}:`, error.message);
+        // Continue updating other tables even if one fails
+      }
+    }
+
+    res.status(200).json({ message: 'Election ended successfully, vote counts updated, and statuses updated' });
+  } catch (error) {
+    console.error('Error ending election:', error);
+    res.status(500).json({ message: 'Failed to end election', error: error.message });
+  }
+});
+
+app.get('/api/election/results/:electionId', async (req, res) => {
+  const { electionId } = req.params;
+
+  try {
+    // Validate electionId
+    const electionTableName = `election_${electionId}`;
+    const results = await sequelize.query(
+      `SELECT candidate_id, candidate_name, candidate_party, votes FROM ${electionTableName}`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({ message: 'No results found for this election' });
+    }
+
+    res.status(200).json({ results });
+  } catch (error) {
+    console.error('Error fetching election results:', error);
+    res.status(500).json({ message: 'Failed to fetch election results', error: error.message });
   }
 });
 
