@@ -1,0 +1,32 @@
+[
+  {
+    "electionId": "11",
+    "candidateId": "1",
+    "hashedVoterId": "0x6171fdca598d5b5b0972f826968da3c55dbf3423f194b07e62a2d999bd0d14e0",
+    "timestamp": "22/04/2025, 10:05:03"
+  },
+  {
+    "electionId": "12",
+    "candidateId": "1",
+    "hashedVoterId": "0x6171fdca598d5b5b0972f826968da3c55dbf3423f194b07e62a2d999bd0d14e0",
+    "timestamp": "22/04/2025, 10:25:19"
+  },
+  {
+    "electionId": "12",
+    "candidateId": "1",
+    "hashedVoterId": "0x4ca61667a6086c915d0bf1b542abd171bdf676d52eed640e514e984beed3fefe",
+    "timestamp": "22/04/2025, 10:26:11"
+  },
+  {
+    "electionId": "12",
+    "candidateId": "2",
+    "hashedVoterId": "0x431555e256f45b9e258c5c2d043540b04f04b520dc68250a6344dfc64cf71a68",
+    "timestamp": "22/04/2025, 10:26:24"
+  },
+  {
+    "electionId": "12",
+    "candidateId": "3",
+    "hashedVoterId": "0x25d56a25be81b183908e80ccc522e72d4187480a4aa29fa7e4dd1112546fabef",
+    "timestamp": "22/04/2025, 10:26:52"
+  }
+]
